@@ -1,0 +1,233 @@
+ <!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bank DApp - 66049472 วรากร มาตุเรศ</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex items-center justify-center p-4">
+  <div class="max-w-lg w-full bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-6">
+    
+    <!-- ส่วนแสดงข้อมูลประจำตัวนักศึกษาตามข้อกำหนด -->
+    <header class="border-b border-slate-800 pb-4 text-center space-y-1">
+      <h1 class="text-2xl font-bold tracking-tight text-sky-400">Bank DApp System</h1>
+      <p class="text-slate-200 font-medium">นายวรากร มาตุเรศ</p>
+      <p class="text-slate-400 text-sm">รหัสนักศึกษา: 66049472</p>
+      <div class="pt-1">
+        <span class="text-[11px] font-mono text-slate-500 break-all">
+          Contract: 0x2c8ffCF0bDc71b29697dB78679B89E2cE1a4cD0e
+        </span>
+      </div>
+    </header>
+
+    <!-- ส่วนเชื่อมต่อ MetaMask -->
+    <div class="space-y-2">
+      <div class="flex items-center justify-between">
+        <span class="text-sm font-medium text-slate-300">กระเป๋าเงิน (MetaMask)</span>
+        <button id="connectBtn" class="px-4 py-2 bg-sky-600 hover:bg-sky-500 active:scale-95 text-white rounded-lg font-medium text-xs transition duration-150">
+          เชื่อมต่อ MetaMask
+        </button>
+      </div>
+      <div id="accountDisplay" class="text-xs font-mono bg-slate-950 p-3 rounded-lg border border-slate-800 break-all text-slate-400">
+        สถานะ: ยังไม่ได้เชื่อมต่อบัญชี
+      </div>
+    </div>
+
+    <!-- ยอดเงินฝากในระบบธนาคาร (CheckBlance) -->
+    <div class="bg-slate-950/80 p-5 rounded-xl border border-slate-800 space-y-3">
+      <div class="flex justify-between items-center">
+        <span class="text-sm text-slate-400">ยอดเงินคงเหลือในธนาคาร</span>
+        <button id="checkBalanceBtn" class="text-xs bg-slate-800 hover:bg-slate-700 active:scale-95 px-3 py-1.5 rounded-md text-sky-300 transition duration-150">
+          ตรวจสอบยอด (Check Balance)
+        </button>
+      </div>
+      <p id="balanceDisplay" class="text-3xl font-extrabold text-emerald-400">
+        0.00 <span class="text-sm text-slate-400 font-normal">ETH</span>
+      </p>
+    </div>
+
+    <!-- ทำรายการฝากเงิน (Deposit) -->
+    <div class="space-y-2">
+      <label for="depositAmount" class="block text-sm font-medium text-slate-300">ฝากเงิน (Deposit)</label>
+      <div class="flex gap-2">
+        <input 
+          id="depositAmount" 
+          type="number" 
+          step="0.0001" 
+          placeholder="ระบุจำนวน ETH เช่น 0.01" 
+          class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-500" 
+        />
+        <button id="depositBtn" class="bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-medium px-5 py-2 rounded-lg text-sm transition duration-150 shrink-0">
+          Deposit
+        </button>
+      </div>
+    </div>
+
+    <!-- ทำรายการถอนเงิน (Withdraw) -->
+    <div class="space-y-2">
+      <label for="withdrawAmount" class="block text-sm font-medium text-slate-300">ถอนเงิน (Withdraw)</label>
+      <div class="flex gap-2">
+        <input 
+          id="withdrawAmount" 
+          type="number" 
+          step="0.0001" 
+          placeholder="ระบุจำนวน ETH เช่น 0.005" 
+          class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-500" 
+        />
+        <button id="withdrawBtn" class="bg-rose-600 hover:bg-rose-500 active:scale-95 text-white font-medium px-5 py-2 rounded-lg text-sm transition duration-150 shrink-0">
+          Withdraw
+        </button>
+      </div>
+    </div>
+
+    <!-- กล่องแสดงสถานะการทำธุรกรรม -->
+    <div id="statusBox" class="text-xs text-center p-2.5 rounded-lg border border-transparent min-h-[2.5rem] flex items-center justify-center font-mono">
+      พร้อมทำรายการ
+    </div>
+  </div>
+
+  <script>
+    const CONTRACT_ADDRESS = "0x2c8ffCF0bDc71b29697dB78679B89E2cE1a4cD0e";
+
+    const CONTRACT_ABI = [
+      "function deposit() public payable",
+      "function withdraw(uint amount) public",
+      "function checkBlance() public view returns (uint balance)",
+      "event Deposit(address indexed owner, uint amount)",
+      "event Withdraw(address indexed owner, uint amount)"
+    ];
+
+    let provider = null;
+    let signer = null;
+    let bankContract = null;
+
+    const connectBtn = document.getElementById("connectBtn");
+    const accountDisplay = document.getElementById("accountDisplay");
+    const balanceDisplay = document.getElementById("balanceDisplay");
+    const checkBalanceBtn = document.getElementById("checkBalanceBtn");
+    const depositBtn = document.getElementById("depositBtn");
+    const withdrawBtn = document.getElementById("withdrawBtn");
+    const depositAmountInput = document.getElementById("depositAmount");
+    const withdrawAmountInput = document.getElementById("withdrawAmount");
+    const statusBox = document.getElementById("statusBox");
+
+    function updateStatus(message, type = "info") {
+      statusBox.textContent = message;
+      if (type === "error") {
+        statusBox.className = "text-xs text-center p-2.5 rounded-lg border border-rose-800/50 bg-rose-950/40 text-rose-400 min-h-[2.5rem] flex items-center justify-center font-mono break-all";
+      } else if (type === "success") {
+        statusBox.className = "text-xs text-center p-2.5 rounded-lg border border-emerald-800/50 bg-emerald-950/40 text-emerald-400 min-h-[2.5rem] flex items-center justify-center font-mono";
+      } else {
+        statusBox.className = "text-xs text-center p-2.5 rounded-lg border border-slate-800 bg-slate-950 text-slate-400 min-h-[2.5rem] flex items-center justify-center font-mono";
+      }
+    }
+
+    async function connectWallet() {
+      if (typeof window.ethereum === "undefined") {
+        updateStatus("ข้อผิดพลาด: ไม่พบ MetaMask ในเบราว์เซอร์นี้", "error");
+        return;
+      }
+      try {
+        updateStatus("กำลังร้องขอการเชื่อมต่อ MetaMask...");
+        provider = new ethers.providers.Web3Provider(window.ethereum);
+        await provider.send("eth_requestAccounts", []);
+        signer = provider.getSigner();
+        const userAddress = await signer.getAddress();
+
+        accountDisplay.textContent = `บัญชี: ${userAddress}`;
+        connectBtn.textContent = "เชื่อมต่อแล้ว";
+        connectBtn.className = "px-4 py-2 bg-emerald-700 text-white rounded-lg font-medium text-xs cursor-default";
+        connectBtn.disabled = true;
+
+        bankContract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+        updateStatus("เชื่อมต่อกระเป๋าเงินสำเร็จ", "success");
+        await fetchBalance();
+      } catch (err) {
+        updateStatus(`เชื่อมต่อไม่สำเร็จ: ${err.message}`, "error");
+      }
+    }
+
+    async function fetchBalance() {
+      if (!bankContract) {
+        updateStatus("กรุณาเชื่อมต่อ MetaMask ก่อนตรวจสอบยอดเงิน", "error");
+        return;
+      }
+      try {
+        updateStatus("กำลังอ่านข้อมูลจาก Contract...");
+        const balanceWei = await bankContract.checkBlance();
+        const balanceEth = ethers.utils.formatEther(balanceWei);
+        balanceDisplay.innerHTML = `${balanceEth} <span class="text-sm text-slate-400 font-normal">ETH</span>`;
+        updateStatus("อัปเดตยอดเงินล่าสุดเรียบร้อย", "success");
+      } catch (err) {
+        updateStatus(`ตรวจสอบยอดเงินไม่สำเร็จ: ${err.reason || err.message}`, "error");
+      }
+    }
+
+    async function handleDeposit() {
+      if (!bankContract) {
+        updateStatus("กรุณาเชื่อมต่อ MetaMask ก่อนทำรายการ", "error");
+        return;
+      }
+      const ethValue = depositAmountInput.value.trim();
+      if (!ethValue || parseFloat(ethValue) <= 0) {
+        updateStatus("กรุณากรอกจำนวน ETH ที่ต้องการฝากให้ถูกต้อง", "error");
+        return;
+      }
+
+      try {
+        updateStatus("กรุณายืนยัน Transaction บน MetaMask...");
+        const weiValue = ethers.utils.parseEther(ethValue);
+        const tx = await bankContract.deposit({ value: weiValue });
+        
+        updateStatus(`กำลังประมวลผลบนบล็อกเชน (Tx: ${tx.hash.substring(0, 10)}...)...`);
+        await tx.wait();
+
+        updateStatus(`ฝากเงิน ${ethValue} ETH สำเร็จแล้ว!`, "success");
+        depositAmountInput.value = "";
+        await fetchBalance();
+      } catch (err) {
+        updateStatus(`การฝากเงินล้มเหลว: ${err.reason || err.message}`, "error");
+      }
+    }
+
+    async function handleWithdraw() {
+      if (!bankContract) {
+        updateStatus("กรุณาเชื่อมต่อ MetaMask ก่อนทำรายการ", "error");
+        return;
+      }
+      const ethValue = withdrawAmountInput.value.trim();
+      if (!ethValue || parseFloat(ethValue) <= 0) {
+        updateStatus("กรุณากรอกจำนวน ETH ที่ต้องการถอนให้ถูกต้อง", "error");
+        return;
+      }
+
+      try {
+        updateStatus("กรุณายืนยัน Transaction บน MetaMask...");
+        const weiValue = ethers.utils.parseEther(ethValue);
+        const tx = await bankContract.withdraw(weiValue);
+
+        updateStatus(`กำลังประมวลผลบนบล็อกเชน (Tx: ${tx.hash.substring(0, 10)}...)...`);
+        await tx.wait();
+
+        updateStatus(`ถอนเงิน ${ethValue} ETH สำเร็จแล้ว!`, "success");
+        withdrawAmountInput.value = "";
+        await fetchBalance();
+      } catch (err) {
+        updateStatus(`การถอนเงินล้มเหลว: ${err.reason || err.message}`, "error");
+      }
+    }
+
+    connectBtn.addEventListener("click", connectWallet);
+    checkBalanceBtn.addEventListener("click", fetchBalance);
+    depositBtn.addEventListener("click", handleDeposit);
+    withdrawBtn.addEventListener("click", handleWithdraw);
+
+    if (window.ethereum) {
+      window.ethereum.on("accountsChanged", () => window.location.reload());
+      window.ethereum.on("chainChanged", () => window.location.reload());
+    }
+  </script>
+</body>
+</html>
